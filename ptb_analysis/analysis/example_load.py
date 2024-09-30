@@ -10,6 +10,12 @@ data = fireFly_dataPreproc(path)
 # data.behav.continuous.variable_name
 rad_vel = data.behav.continuous.rad_vel
 
+
+# to access the spike times
+spike_times = data.spikes.spike_times
+print(f"(num units, num trials): {spike_times.shape}")
+print(f"Neuron 10, trial 123 - num spikes : {len(spike_times[10, 123])}")
+
 # rad_vel is a dict with keys the trial number.
 
 # if you want to pre-process for TAME-GP
