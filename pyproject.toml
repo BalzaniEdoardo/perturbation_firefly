@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "firefly_perturbation"
+version = "0.1.0"
+authors = [{name = "JP & Edoardo"}]
+description = "Data analysis."
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["neuroscience", "TAME-GP"]
+license = { file = "LICENSE" }
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12"
+]
+
+dependencies = [
+    "numpy>1.20",  # Numerical computing library
+    "scipy>=1.10", # Scientific computing library
+    "matplotlib",
+    "statsmodels",
+]
+
+[tool.setuptools]
+packages = { find = { include = ["ptb_analysis.io"] } }
+
+
