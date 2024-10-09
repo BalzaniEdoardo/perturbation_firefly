@@ -101,13 +101,13 @@ class fireFly_dataPreproc(data_handler):
         print('set filter for initial condition, trial matching:',self.filter.sum())
 
     def preProcPGPFA(self, binMs=20, init_event='t_flyON', final_event='t_stop', printEndString=True, smooth=False,
-                     filt_window=None):
+                     filt_window=None, preTrialMs=0, postTrialMs=0):
 
         # get initial event dict
         if init_event == 't_flyON':
             ev0_dict = {}
             for tr in self.behav.events.t_flyOFF.keys():
-                ev0_dict[tr] = self.behav.events.t_flyOFF[tr] - self.behav.flyON_dur
+                ev0_dict[tr] = self.behav.events.t_flyOFF[tr] - preTrialMs
 
             ev0 = dict_to_vec(ev0_dict)
         else:
@@ -135,8 +135,8 @@ class fireFly_dataPreproc(data_handler):
             ext_ev0 = {}
             ext_ev1 = {}
             for tr in ev0_dict.keys():
-                ext_ev0[tr] = ev0_dict[tr] - self.behav.pre_trial_dur
-                ext_ev1[tr] = ev1_dict[tr] + self.behav.post_trial_dur
+                ext_ev0[tr] = ev0_dict[tr] - preTrialMs
+                ext_ev1[tr] = ev1_dict[tr] + postTrialMs
             tt_start = dict_to_vec(ext_ev0)
             tt_stop = dict_to_vec(ext_ev1)
             time_dict = self.spikes.bin_spikes(self.behav.time_stamps, t_start=tt_start, t_stop=tt_stop, select=self.filter)
@@ -209,9 +209,9 @@ class fireFly_dataPreproc(data_handler):
             print('Preprocessing for P-GPFA completed')
         return self
 
-    def preProcPCA(self, binMs=20, init_event='t_flyON', final_event='t_stop', smooth=False,filt_window=None):
+    def preProcPCA(self, binMs=20, init_event='t_flyON', final_event='t_stop', smooth=False,filt_window=None, preTrialMs=0, postTrialMs=0):
         self.preProcPGPFA(binMs=binMs, init_event=init_event, final_event=final_event,printEndString=False, smooth=smooth,
-                          filt_window=filt_window)
+                          filt_window=filt_window, preTrialMs=preTrialMs, postTrialMs=postTrialMs)
 
         # concatenate all data to make it simpler to use with PCA/FA or similar models
         stackData = []
