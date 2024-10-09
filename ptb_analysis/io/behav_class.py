@@ -1041,38 +1041,3 @@ def pair_replay_and_active(trials_behv):
         pair_trials = np.hstack((pair_trials, pair))
     return pair_trials
 
-
-if __name__ == "__main__":
-    from copy import deepcopy
-
-    from scipy.io import loadmat
-    from spike_times_class import *
-
-    dat = loadmat(
-        "/Volumes/server/Data/Monkey2_newzdrive/Schro/Utah Array/Feb 20 2018/neural data/Pre-processing X E/m53s41.mat"
-    )
-    # print(dat.keys())
-    behav_stat_keys = "behv_stats"
-    lfps_key = "lfps"
-    units_key = "units"
-    behav_dat_key = "trials_behv"
-
-    beh_all = behavior_experiment(dat, behav_dat_key, behav_stat_keys)
-    info = load_trial_types(
-        dat[behav_stat_keys].flatten(), dat[behav_dat_key].flatten()
-    )
-    # beh_stat = dat[behav_stat_keys].flatten()
-    # trial_type = load_trial_types(beh_stat)
-    # idxOther = trial_type.get_all(False)
-    # idxUnclassRaw = trial_type.get_rewarded(-1)
-    # idxUncDensity = trial_type.get_density(0.0001)
-    units = dat[units_key].flatten()
-    spk = spike_counts(dat, units_key)
-    spk.bin_spikes(beh_all.time_stamps, 0, beh_all.events.t_stop)
-    histVec = deepcopy(spk.binned_spikes)
-    select = np.array([7, 8, 17])
-    spk.bin_spikes(beh_all.time_stamps, 0, beh_all.events.t_stop, select)
-
-    print(np.prod(histVec[0, 17] == spk.binned_spikes[0, 2]))
-    # trials_behv = dat['trials_behv'].flatten()[1]
-    # tb1 = trials_behv[1][0]['yre'][0, 0].flatten()

@@ -239,35 +239,3 @@ def spike_amplitude(waveform, plt_first=False):
         mx0 = mx[0]
         plt.plot(x[[mn0, mx0]], waveform[0, [mn0, mx0]], "o")
     return amplitude
-
-
-if __name__ == "__main__":
-
-    from copy import deepcopy
-
-    from behav_class import *
-    from scipy.io import loadmat
-
-    dat = loadmat(
-        "/Volumes/server/Data/Monkey2_newzdrive/Schro/Sim_recordings/Aug 10 2018/neural data/Pre-processing X E/m53s111.mat"
-    )
-    print(dat.keys())
-    behav_stat_keys = "behv_stats"
-    lfps_key = "lfps"
-    units_key = "units"
-    behav_dat_key = "trials_behv"
-
-    beh_all = behavior_experiment(dat, behav_dat_key, behav_stat_keys)
-    # beh_stat = dat[behav_stat_keys].flatten()
-    # trial_type = load_trial_types(beh_stat)
-    # idxOther = trial_type.get_all(False)
-    # idxUnclassRaw = trial_type.get_rewarded(-1)
-    # idxUncDensity = trial_type.get_density(0.0001)
-    units = dat[units_key].flatten()
-    spk = spike_counts(dat, units_key)
-    spk.bin_spikes(beh_all.time_stamps, 0, beh_all.events.t_stop)
-    histVec = deepcopy(spk.binned_spikes)
-    select = np.array([7, 8, 17])
-    spk.bin_spikes(beh_all.time_stamps, 0, beh_all.events.t_stop, select)
-
-    print("select test: ", np.prod(histVec[0, 17] == spk.binned_spikes[0, 2]))
