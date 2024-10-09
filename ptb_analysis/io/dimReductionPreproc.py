@@ -7,8 +7,11 @@ import bisect
 
 import re
 
+from scipy.io import loadmat
 from .data_handler import *
+from .behav_class import emptyStruct
 
+from copy import deepcopy
 
 class fireFly_dataPreproc(data_handler):
     """
