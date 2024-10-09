@@ -1,9 +1,21 @@
 from copy import deepcopy
+
 import numpy as np
 
 
-def add_perturbation(traj_merged, ptb_velocity, ptb_i, unptb_i, velocity_merged, idx_match,
-                     tp_pair, tp_ptb, idx_ptb_start, bin_size=0.006, return_vel=False):
+def add_perturbation(
+    traj_merged,
+    ptb_velocity,
+    ptb_i,
+    unptb_i,
+    velocity_merged,
+    idx_match,
+    tp_pair,
+    tp_ptb,
+    idx_ptb_start,
+    bin_size=0.006,
+    return_vel=False,
+):
     """
     Add a perturbation to the trajectory of a specified unperturbed trial.
 
@@ -59,17 +71,18 @@ def add_perturbation(traj_merged, ptb_velocity, ptb_i, unptb_i, velocity_merged,
     # Create a copy of the velocity of the unperturbed trial for modification
     sim_vel_ptb = deepcopy(velocity_merged[unptb_i])
     # Zero out the velocities after the last valid timepoint
-    sim_vel_ptb[np.where(~np.isnan(sim_vel_ptb[:, 0]))[0][-1] + 1:] = 0
+    sim_vel_ptb[np.where(~np.isnan(sim_vel_ptb[:, 0]))[0][-1] + 1 :] = 0
 
     try:
         # Add perturbation velocity to the corresponding segment in the unperturbed trial
-        sim_vel_ptb[idx_match + tp_pair: idx_match + tp_pair + tp_ptb] += ptb_velocity[ptb_i,
-                                                                                       idx_ptb_start:idx_ptb_start + tp_ptb, :]
+        sim_vel_ptb[idx_match + tp_pair : idx_match + tp_pair + tp_ptb] += ptb_velocity[
+            ptb_i, idx_ptb_start : idx_ptb_start + tp_ptb, :
+        ]
     except:
         # If the perturbation cannot be applied, return None values
         if not return_vel:
-            return (None, ) * 4
-        return (None, ) * 5
+            return (None,) * 4
+        return (None,) * 5
 
     # Time vector for integration using the provided bin size
     ts = bin_size * np.arange(sim_vel_ptb.shape[0])
@@ -78,17 +91,27 @@ def add_perturbation(traj_merged, ptb_velocity, ptb_i, unptb_i, velocity_merged,
     ang_cum = single_trial_angle_integrate(sim_vel_ptb[:, 1], bin_size, ts, flip=1)
 
     # Define a helper function for zero padding and cumulative summation
-    zeropad_and_cumulative = lambda ts, vel: np.hstack((np.zeros(np.sum(ts <= 0)), np.cumsum(vel[ts > 0] * bin_size)))
+    zeropad_and_cumulative = lambda ts, vel: np.hstack(
+        (np.zeros(np.sum(ts <= 0)), np.cumsum(vel[ts > 0] * bin_size))
+    )
 
     # Compute x and y velocity components based on cumulative angle
     vx, vy = sim_vel_ptb[:, 0] * np.sin(ang_cum), sim_vel_ptb[:, 0] * np.cos(ang_cum)
 
     # Integrate velocities to get positions
-    pos_x = zeropad_and_cumulative(ts, vx) + traj_unptb[np.where(~np.isnan(traj_unptb[:, 1]))[0][0], 0]
-    pos_y = zeropad_and_cumulative(ts, vy) + traj_unptb[np.where(~np.isnan(traj_unptb[:, 1]))[0][0], 1]
+    pos_x = (
+        zeropad_and_cumulative(ts, vx)
+        + traj_unptb[np.where(~np.isnan(traj_unptb[:, 1]))[0][0], 0]
+    )
+    pos_y = (
+        zeropad_and_cumulative(ts, vy)
+        + traj_unptb[np.where(~np.isnan(traj_unptb[:, 1]))[0][0], 1]
+    )
 
     # Determine the stopping index of the trajectory
-    idx_stop = max(np.where(~np.isnan(traj_unptb[:, 1]))[0][-1], idx_match + tp_pair + tp_ptb)
+    idx_stop = max(
+        np.where(~np.isnan(traj_unptb[:, 1]))[0][-1], idx_match + tp_pair + tp_ptb
+    )
     final_pos = np.array([pos_x[idx_stop], pos_y[idx_stop]])
 
     if not return_vel:
@@ -152,7 +175,9 @@ def single_trial_angle_integrate(angle, dt, ts, flip=1):
 
     # Iterate over timepoints and integrate the angle
     for tt in range(i0, ts.shape[0]):
-        cum_ang[tt] = cum_ang[tt - 1] + flip * angle[tt] * np.pi / 180. * dt  # Convert degrees to radians and integrate
+        cum_ang[tt] = (
+            cum_ang[tt - 1] + flip * angle[tt] * np.pi / 180.0 * dt
+        )  # Convert degrees to radians and integrate
 
     return cum_ang
 
@@ -175,12 +200,16 @@ def integrate_path(behav, velocity):
     """
     # Helper function for zero-padding and cumulative summation
     zeropad_and_cumulative = lambda ts, vel, dts: np.hstack(
-        (np.zeros(np.sum(ts <= 0)), np.cumsum(vel[ts > 0] * dts[ts > 0])))
+        (np.zeros(np.sum(ts <= 0)), np.cumsum(vel[ts > 0] * dts[ts > 0]))
+    )
 
     # Apply the helper function to each trial in the dictionary and store results
-    dictFuct = lambda ts, vel: {key: zeropad_and_cumulative(ts[key], vel[key],
-                                                            np.hstack([[0], np.diff(behav.time_stamps[key])])) for key
-                                in vel.keys()}
+    dictFuct = lambda ts, vel: {
+        key: zeropad_and_cumulative(
+            ts[key], vel[key], np.hstack([[0], np.diff(behav.time_stamps[key])])
+        )
+        for key in vel.keys()
+    }
 
     # Compute the integrated path for each trial and return as a dictionary
     integr_path = dictFuct(behav.time_stamps, velocity)

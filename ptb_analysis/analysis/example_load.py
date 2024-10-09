@@ -1,6 +1,6 @@
-from ptb_analysis.io import fireFly_dataPreproc
 from scipy.io import loadmat
-from ptb_analysis.io import load_trial_types
+
+from ptb_analysis.io import fireFly_dataPreproc, load_trial_types
 
 # this loads the matlab struct into python
 path = "/Users/ebalzani/Desktop/m53s36.mat"
@@ -42,7 +42,7 @@ print(f"(num_neurons, time points): {counts[trial_num]['Y'].shape}")
 
 
 # load the trial types using the code I have
-dat = loadmat('/Users/ebalzani/Desktop/m53s36.mat')
+dat = loadmat("/Users/ebalzani/Desktop/m53s36.mat")
 info = load_trial_types(dat["behv_stats"].flatten(), dat["trials_behv"].flatten())
 trial_type = info.trial_type
 

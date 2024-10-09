@@ -1,9 +1,8 @@
 import os
+
 import numpy as np
 
 from ptb_analysis.io import fireFly_dataPreproc
-
-
 
 
 # %% create the structures
@@ -46,10 +45,18 @@ def create_session_trajectory_info(path, session):
         processed data.
 
     """
-    dat = fireFly_dataPreproc(os.path.join(path, session + '.mat'))
-    dat.set_filters('all', True)
-    dat.preProcPCA(binMs=6, init_event='t_flyON', final_event='t_stop', smooth=False, filt_window=None,
-                   preTrialMs=0, postTrialMs=0, add_events=True)
+    dat = fireFly_dataPreproc(os.path.join(path, session + ".mat"))
+    dat.set_filters("all", True)
+    dat.preProcPCA(
+        binMs=6,
+        init_event="t_flyON",
+        final_event="t_stop",
+        smooth=False,
+        filt_window=None,
+        preTrialMs=0,
+        postTrialMs=0,
+        add_events=True,
+    )
     max_tp = 0
     num_trs = np.unique(dat.preProcessed.trialId).shape[0]
     for tr in np.unique(dat.preProcessed.trialId):
@@ -58,7 +65,7 @@ def create_session_trajectory_info(path, session):
 
     trajectory = np.zeros((num_trs, max_tp, 2), dtype=np.float32) * np.nanco
     ptb_index = np.zeros((num_trs), dtype=int)  # set -1 in unptb
-    session_list = np.zeros((num_trs), dtype='U20')
+    session_list = np.zeros((num_trs), dtype="U20")
     trial_ids = np.zeros((num_trs), dtype=int)
     target_pos = np.zeros((num_trs, 2), dtype=np.float32)
     tot_velocity = np.zeros((num_trs, max_tp, 2), dtype=np.float32) * np.nan
@@ -69,29 +76,42 @@ def create_session_trajectory_info(path, session):
     cnt = 0
     for tr in np.unique(dat.preProcessed.trialId):
         sel = dat.preProcessed.trialId == tr
-        trajectory[cnt, :sel.sum(), 0] = dat.preProcessed.covariates['x_monk'][sel]
-        trajectory[cnt, :sel.sum(), 1] = dat.preProcessed.covariates['y_monk'][sel]
-        tot_velocity[cnt, :sel.sum(), 0] = dat.preProcessed.covariates['rad_vel'][sel]
-        tot_velocity[cnt, :sel.sum(), 1] = dat.preProcessed.covariates['ang_vel'][sel]
+        trajectory[cnt, : sel.sum(), 0] = dat.preProcessed.covariates["x_monk"][sel]
+        trajectory[cnt, : sel.sum(), 1] = dat.preProcessed.covariates["y_monk"][sel]
+        tot_velocity[cnt, : sel.sum(), 0] = dat.preProcessed.covariates["rad_vel"][sel]
+        tot_velocity[cnt, : sel.sum(), 1] = dat.preProcessed.covariates["ang_vel"][sel]
         try:
-            ptb_velocity[cnt, :sel.sum(), 0] = dat.preProcessed.covariates['rad_vel_ptb'][sel]
-            ptb_velocity[cnt, :sel.sum(), 1] = dat.preProcessed.covariates['ang_vel_ptb'][sel]
+            ptb_velocity[cnt, : sel.sum(), 0] = dat.preProcessed.covariates[
+                "rad_vel_ptb"
+            ][sel]
+            ptb_velocity[cnt, : sel.sum(), 1] = dat.preProcessed.covariates[
+                "ang_vel_ptb"
+            ][sel]
         except:
             pass
 
-        if sum(dat.preProcessed.covariates['t_ptb'][sel]):
-            ptb_index[cnt] = np.where(dat.preProcessed.covariates['t_ptb'][sel])[0][0]
+        if sum(dat.preProcessed.covariates["t_ptb"][sel]):
+            ptb_index[cnt] = np.where(dat.preProcessed.covariates["t_ptb"][sel])[0][0]
         else:
             ptb_index[cnt] = -1
         trial_ids[cnt] = tr
-        target_pos[cnt, 0] = dat.preProcessed.covariates['x_fly'][cnt]
-        target_pos[cnt, 1] = dat.preProcessed.covariates['y_fly'][cnt]
+        target_pos[cnt, 0] = dat.preProcessed.covariates["x_fly"][cnt]
+        target_pos[cnt, 1] = dat.preProcessed.covariates["y_fly"][cnt]
 
         is_rewarded[cnt] = all(~np.isnan(dat.behav.events.t_reward[tr]))
 
         cnt += 1
 
-    return trajectory, ptb_index, session_list, trial_ids, target_pos, is_rewarded, ptb_velocity, tot_velocity
+    return (
+        trajectory,
+        ptb_index,
+        session_list,
+        trial_ids,
+        target_pos,
+        is_rewarded,
+        ptb_velocity,
+        tot_velocity,
+    )
 
 
 def merge_trajectories(traj1, traj2):
@@ -125,13 +145,15 @@ def merge_trajectories(traj1, traj2):
     (3, 3, 2)
     """
     mx_tp = max(traj1.shape[1], traj2.shape[1])
-    traj_merged = np.zeros((traj1.shape[0] + traj2.shape[0], mx_tp, 2), dtype=np.float32) * np.nan
+    traj_merged = (
+        np.zeros((traj1.shape[0] + traj2.shape[0], mx_tp, 2), dtype=np.float32) * np.nan
+    )
 
     for cnt in range(traj1.shape[0]):
-        traj_merged[cnt, :traj1.shape[1], :] = traj1[cnt]
+        traj_merged[cnt, : traj1.shape[1], :] = traj1[cnt]
 
     for cnt_2 in range(traj2.shape[0]):
-        traj_merged[cnt + 1 + cnt_2, :traj2.shape[1], :] = traj2[cnt_2]
+        traj_merged[cnt + 1 + cnt_2, : traj2.shape[1], :] = traj2[cnt_2]
     return traj_merged
 
 
@@ -175,9 +197,11 @@ def compute_min_diff_by_trial(traj_before_ptb, other_traj):
     """
     if traj_before_ptb.shape[0] > other_traj.shape[0]:
         return -1, np.nan
-    mat_shifts = np.zeros((other_traj.shape[0] - traj_before_ptb.shape[0], traj_before_ptb.shape[0], 2))
+    mat_shifts = np.zeros(
+        (other_traj.shape[0] - traj_before_ptb.shape[0], traj_before_ptb.shape[0], 2)
+    )
     for i in range(other_traj.shape[0] - traj_before_ptb.shape[0]):
-        mat_shifts[i, :] = other_traj[i:i + traj_before_ptb.shape[0]]
+        mat_shifts[i, :] = other_traj[i : i + traj_before_ptb.shape[0]]
     try:
         dsts = np.linalg.norm(mat_shifts - traj_before_ptb, axis=(1, 2))
         imin = np.nanargmin(dsts)
@@ -185,7 +209,3 @@ def compute_min_diff_by_trial(traj_before_ptb, other_traj):
         return -1, np.nan
     dmin = dsts[imin]
     return imin, dmin
-
-
-
-

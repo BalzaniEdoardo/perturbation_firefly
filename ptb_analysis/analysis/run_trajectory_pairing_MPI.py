@@ -1,7 +1,9 @@
 """MPI parallelized code to pair trajectories according to how similar they are before the perturbation happens."""
+
 import numpy as np
-from ptb_analysis.process import compute_min_diff_by_trial
 from mpi4py import MPI
+
+from ptb_analysis.process import compute_min_diff_by_trial
 
 # Initialize the MPI communicator, obtain the size and rank of the process
 comm = MPI.COMM_WORLD
@@ -15,31 +17,37 @@ path_to_trajectory_info = ""
 if rank == 0:
     try:
         # Attempt to load the trajectory data from an external drive
-        dat_traj = np.load('/Volumes/TOSHIBA EXT/TAME_paper/behavior/trajectory_and_info.npz')
+        dat_traj = np.load(
+            "/Volumes/TOSHIBA EXT/TAME_paper/behavior/trajectory_and_info.npz"
+        )
     except:
         # If not found, try loading the data from the local directory
-        dat_traj = np.load('trajectory_and_info.npz')
+        dat_traj = np.load("trajectory_and_info.npz")
 
     # Extract relevant data arrays from the loaded file
-    traj_merged = dat_traj['trajectory']
-    ptb_index_merged = dat_traj['ptb_index']
-    session_list_merged = dat_traj['session_list']
-    trial_ids_merged = dat_traj['trial_ids']
-    target_pos_merged = dat_traj['target_pos']
-    is_rewarded_merged = dat_traj['is_rewarded']
-    tot_velocity_merged = dat_traj['tot_velocity']
-    ptb_velocity_merged = dat_traj['ptb_velocity']
+    traj_merged = dat_traj["trajectory"]
+    ptb_index_merged = dat_traj["ptb_index"]
+    session_list_merged = dat_traj["session_list"]
+    trial_ids_merged = dat_traj["trial_ids"]
+    target_pos_merged = dat_traj["target_pos"]
+    is_rewarded_merged = dat_traj["is_rewarded"]
+    tot_velocity_merged = dat_traj["tot_velocity"]
+    ptb_velocity_merged = dat_traj["ptb_velocity"]
 
     # Calculate the number of perturbation trials
     tot_ptb = (ptb_index_merged != -1).sum()
     idx_ptb = np.where(ptb_index_merged != -1)[0]  # Indices of perturbation trials
-    tot_unptb = ptb_index_merged.shape[0] - tot_ptb  # Total number of unperturbed trials
+    tot_unptb = (
+        ptb_index_merged.shape[0] - tot_ptb
+    )  # Total number of unperturbed trials
 
     # Distribute the perturbation indices evenly across processes
     use_ptb_dict = {}
     num_trs = int(np.ceil(tot_ptb / size))  # Number of trials assigned to each process
     for k in range(size):
-        use_ptb_dict[k] = idx_ptb[k * num_trs:(k + 1) * num_trs]  # Assign indices to each process
+        use_ptb_dict[k] = idx_ptb[
+            k * num_trs : (k + 1) * num_trs
+        ]  # Assign indices to each process
     print(use_ptb_dict)  # Print the distribution of trials across processes
 
 else:
@@ -113,7 +121,9 @@ for idx in use_ptb_dict[rank]:
         dist_x_trial[cnt_ptb, :] = np.nan
     else:
         # Calculate the trajectory segment before the perturbation
-        rel_traj_before_ptb = target_pos_merged[idx] - traj_merged[idx, ptb_idx - min_tp:ptb_idx]
+        rel_traj_before_ptb = (
+            target_pos_merged[idx] - traj_merged[idx, ptb_idx - min_tp : ptb_idx]
+        )
 
         cnt_unptb = 0
         for idx_unpt in id_unpt_list:
@@ -122,11 +132,16 @@ for idx in use_ptb_dict[rank]:
                 dist_x_trial[cnt_ptb, cnt_unptb] = np.nan
             else:
                 # Calculate the trajectory segment for the unperturbed trial
-                other_traj = target_pos_merged[idx_unpt] - traj_merged[idx_unpt, :last_non_nan[cnt_unptb]]
+                other_traj = (
+                    target_pos_merged[idx_unpt]
+                    - traj_merged[idx_unpt, : last_non_nan[cnt_unptb]]
+                )
                 # Compute the minimum distance between the perturbation segment and unperturbed trial
                 id_opt, dst = compute_min_diff_by_trial(rel_traj_before_ptb, other_traj)
                 dist_x_trial[cnt_ptb, cnt_unptb] = dst  # Store the distance
-                idx_optim_match[cnt_ptb, cnt_unptb] = id_opt  # Store the index of optimal match
+                idx_optim_match[cnt_ptb, cnt_unptb] = (
+                    id_opt  # Store the index of optimal match
+                )
             cnt_unptb += 1
     cnt_ptb += 1
 
@@ -147,11 +162,16 @@ if rank == 0:
             # Append the results from subsequent processes
             trial_lab_fin = np.vstack((trial_lab_fin, trial_lab_list[k]))
             dist_x_trial_fin = np.vstack((dist_x_trial_fin, dist_x_trial_list[k]))
-            idx_optim_match_fin = np.vstack((idx_optim_match_fin, idx_optim_match_list[k]))
+            idx_optim_match_fin = np.vstack(
+                (idx_optim_match_fin, idx_optim_match_list[k])
+            )
 
     # Save the final results to a compressed .npz file
-    np.savez('%d_mpi_distance_matrix_compute.npz' % size,
-             dist_x_trial=dist_x_trial_fin, trial_lab=trial_lab_fin,
-             ptb_idx=np.where(ptb_index_merged != -1)[0],
-             unptb_idx=np.where(ptb_index_merged == -1)[0],
-             idx_optim_match=idx_optim_match_fin)
+    np.savez(
+        "%d_mpi_distance_matrix_compute.npz" % size,
+        dist_x_trial=dist_x_trial_fin,
+        trial_lab=trial_lab_fin,
+        ptb_idx=np.where(ptb_index_merged != -1)[0],
+        unptb_idx=np.where(ptb_index_merged == -1)[0],
+        idx_optim_match=idx_optim_match_fin,
+    )
