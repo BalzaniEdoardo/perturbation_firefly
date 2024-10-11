@@ -63,7 +63,7 @@ def create_session_trajectory_info(path, session):
         sel = dat.preProcessed.trialId == tr
         max_tp = max(max_tp, sel.sum())
 
-    trajectory = np.zeros((num_trs, max_tp, 2), dtype=np.float32) * np.nanco
+    trajectory = np.zeros((num_trs, max_tp, 2), dtype=np.float32) * np.nan
     ptb_index = np.zeros((num_trs), dtype=int)  # set -1 in unptb
     session_list = np.zeros((num_trs), dtype="U20")
     trial_ids = np.zeros((num_trs), dtype=int)

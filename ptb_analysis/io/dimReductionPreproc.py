@@ -3,15 +3,25 @@ Import the matlab structure into python, and pre-process (count spikes etc.) and
 a structure compatible with TAME-GP.
 """
 
+# extract_rate = False
 import bisect
-
+import operator
+import os
 import re
+import sys
+from copy import deepcopy
 
-from scipy.io import loadmat
+import numpy as np
 from .data_handler import *
+from scipy.interpolate import interp1d
+from scipy.io import loadmat
+
 from .behav_class import emptyStruct
 
-from copy import deepcopy
+# if extract_rate:
+#     from extract_presence_rate import (extract_presecnce_rate,
+#                                        extract_presecnce_rate_Uprobe)
+
 
 class fireFly_dataPreproc(data_handler):
     """
@@ -20,7 +30,18 @@ class fireFly_dataPreproc(data_handler):
     formatting of the data.
     """
 
-    def __init__(self, filepath, flyON_dur=0.3, pre_trial_dur=0.2, post_trial_dur=0.2):
+    def __init__(
+        self,
+        filepath,
+        flyON_dur=0.3,
+        pre_trial_dur=0.2,
+        post_trial_dur=0.2,
+        # extract_presence_rate=False,
+        # user_paths=None,
+        lfp_beta=None,
+        lfp_alpha=None,
+        lfp_theta=None,
+    ):
 
         re.findall("m\d+s\d+", filepath)
         session = re.findall("m\d+s\d+", filepath)[0]
@@ -29,7 +50,7 @@ class fireFly_dataPreproc(data_handler):
         behav_stat_key = "behv_stats"
         spike_key = "units"
         behav_dat_key = "trials_behv"
-        lfp_key = None  # 'lfps'
+        lfp_key = "lfps"
 
         use_left_eye = ["53s48"]
 
@@ -38,6 +59,41 @@ class fireFly_dataPreproc(data_handler):
         else:
             use_eye = "right"
 
+        extract_any = False
+        if not lfp_beta is None:
+            dirname = os.path.dirname(filepath)
+            lfp_beta = loadmat(os.path.join(dirname, "lfp_beta_%s.mat" % session))[
+                "lfp_beta"
+            ]
+            path_lfp = os.path.join(dirname, "lfp_beta_%s.mat" % session)
+            extract_any = True
+
+        if not lfp_alpha is None:
+            dirname = os.path.dirname(filepath)
+            lfp_alpha = loadmat(os.path.join(dirname, "lfp_alpha_%s.mat" % session))[
+                "lfp_alpha"
+            ]
+            path_lfp = os.path.join(dirname, "lfp_alpha_%s.mat" % session)
+            extract_any = True
+
+        if not lfp_theta is None:
+            dirname = os.path.dirname(filepath)
+            lfp_theta = loadmat(os.path.join(dirname, "lfp_theta_%s.mat" % session))[
+                "lfp_theta"
+            ]
+            path_lfp = os.path.join(dirname, "lfp_theta_%s.mat" % session)
+            extract_any = True
+
+        if not extract_any:
+            path_lfp = ""
+            lfp_key = None
+
+        # # presence rate params
+        # occupancy_bin_sec = 60  # at least one spike per min
+        # occupancy_rate_th = 0.1  # hz
+        #
+        # linearprobe_sampling_fq = 20000
+        # utah_array_sampling_fq = 30000
 
         dat = loadmat(filepath)
 
@@ -49,21 +105,97 @@ class fireFly_dataPreproc(data_handler):
             behav_stat_key,
             pre_trial_dur=pre_trial_dur,
             post_trial_dur=post_trial_dur,
-            lfp_beta=None,
-            lfp_alpha=None,
-            lfp_theta=None,
-            extract_lfp_phase=False,
+            lfp_beta=lfp_beta,
+            lfp_alpha=lfp_alpha,
+            lfp_theta=lfp_theta,
+            extract_lfp_phase=True,
             use_eye=use_eye,
-            fhLFP="",
+            fhLFP=path_lfp,
             extract_fly_and_monkey_xy=True,
             flyON_dur=flyON_dur,
+            skip_not_ok=False,
         )
 
         self.set_filters("all", True)
+        # include replay pairing trials
+        if any(self.info.trial_type["replay"] == 0) and (
+            "trial_id" in self.behav.__dict__.keys()
+        ):  # replay triial are available
+            trial_all_id = self.behav.trial_id[np.where(self.filter)[0]]
+            repl_tr = []
+            for id in trial_all_id:
+                pair = np.where(self.behav.trial_id == id)[0]
+                for tr in pair:
+                    if self.info.trial_type["replay"][tr] == 0:
+                        repl_tr += [tr]
+            self.filter[np.array(repl_tr)] = True
+        elif any(self.info.trial_type["replay"] == 0):
+            self.filter = self.filter | (self.info.trial_type["replay"] == 0)
+
         self.preProcessed = None
+
+        cont_rate_filter = (self.spikes.cR < 0.2) | (
+            self.spikes.unit_type == "multiunit"
+        )
+
+        isi_v_filter = self.spikes.isiV < 0.2
+
+        # if extract_presence_rate:
+        #     occupancy_bin_sec = 60
+        #     occupancy_rate_th = 0.1
+        #     unit_info = {}
+        #     unit_info["unit_type"] = self.spikes.unit_type
+        #     unit_info["spike_width"] = self.spikes.spike_width
+        #     unit_info["waveform"] = self.spikes.waveform
+        #     unit_info["amplitude_wf"] = self.spikes.amplitude_wf
+        #     unit_info["cluster_id"] = self.spikes.cluster_id
+        #     unit_info["electrode_id"] = self.spikes.electrode_id
+        #     unit_info["channel_id"] = self.spikes.channel_id
+        #     unit_info["brain_area"] = self.spikes.brain_area
+        #     unit_info["uQ"] = self.spikes.uQ
+        #     unit_info["isiV"] = self.spikes.isiV
+        #     unit_info["cR"] = self.spikes.cR
+        #     unit_info["date_exp"] = self.date_exp
+        #
+        #     if ("m72" in session) or ("m73" in session):
+        #         presence_rate_filter = extract_presecnce_rate_Uprobe(
+        #             occupancy_bin_sec,
+        #             occupancy_rate_th,
+        #             unit_info,
+        #             session,
+        #             user_paths,
+        #             linearprobe_sampling_fq,
+        #             use_server=None,
+        #         )
+        #     else:
+        #         presence_rate_filter = extract_presecnce_rate(
+        #             occupancy_bin_sec,
+        #             occupancy_rate_th,
+        #             unit_info,
+        #             session,
+        #             user_paths,
+        #             utah_array_sampling_fq,
+        #             linearprobe_sampling_fq,
+        #             use_server=None,
+        #         )
+        #
+        #     presence_rate_filter = presence_rate_filter["presence_rate"] > 0.9
+        #
+        #     self.unit_qual_filter = (
+        #         (cont_rate_filter) * (presence_rate_filter) * (isi_v_filter)
+        #     )
+        # else:
+        self.unit_qual_filter = (cont_rate_filter) * (isi_v_filter)
         return
 
-    def setInitialCond(self, condition="noMovement", init_event="t_flyON"):
+    def setInitialCond(
+        self,
+        condition="noMovement",
+        init_event="t_flyON",
+        oper=operator.or_,
+        abs=True,
+        speedThPerc=95,
+    ):
         condList = ["noMovement", "maxSpeed"]
         if not condition in condList:
             raise ValueError('Condition "%s" is not coded for' % condition)
@@ -82,16 +214,22 @@ class fireFly_dataPreproc(data_handler):
             # filter for trial where velocity is null at the event
             for tr in self.behav.continuous.rad_vel.keys():
                 ts = self.behav.time_stamps[tr]
-                vel = self.behav.continuous.rad_vel[tr]
-                angvel = self.behav.continuous.ang_vel[tr]
+                if abs:
+                    vel = np.abs(self.behav.continuous.rad_vel[tr])
+                    angvel = np.abs(self.behav.continuous.ang_vel[tr])
+                else:
+                    vel = self.behav.continuous.rad_vel[tr]
+                    angvel = self.behav.continuous.ang_vel[tr]
                 iidx = bisect.bisect_left(ts, ev_dict[tr])
                 # this params are used for start and stop detection
-                if (vel[iidx] > 5) and (angvel[iidx] > 3):
+                if oper((vel[iidx] > 5), (angvel[iidx] > 3)):
                     self.filter[tr] = False
+                elif self.behav.events.t_move[tr] < 0:
+                    xxx = 1
 
         if condition == "maxSpeed":
             mxSpeed = np.nanpercentile(
-                np.hstack(list(self.behav.continuous.rad_vel.values())), 95
+                np.hstack(list(self.behav.continuous.rad_vel.values())), speedThPerc
             )
             print("SPEED THRRESHOLD: ", mxSpeed)
             # filter for trial where velocity is null at the event
@@ -100,7 +238,7 @@ class fireFly_dataPreproc(data_handler):
                 vel = self.behav.continuous.rad_vel[tr]
                 angvel = self.behav.continuous.ang_vel[tr]
                 iidx = bisect.bisect_left(ts, ev_dict[tr])
-                if (vel[iidx] < mxSpeed) or (np.abs(angvel[iidx]) > 10):
+                if oper((vel[iidx] < mxSpeed), (np.abs(angvel[iidx]) > 10)):
                     self.filter[tr] = False
 
         print("set filter for initial condition, trial matching:", self.filter.sum())
@@ -115,41 +253,81 @@ class fireFly_dataPreproc(data_handler):
         filt_window=None,
         preTrialMs=0,
         postTrialMs=0,
+        add_events=False,
+        expand_fly_pos=False,
     ):
+
+        assert preTrialMs / 1000.0 <= self.behav.pre_trial_dur
+        assert postTrialMs / 1000.0 <= self.behav.post_trial_dur
 
         # get initial event dict
         if init_event == "t_flyON":
             ev0_dict = {}
             for tr in self.behav.events.t_flyOFF.keys():
-                ev0_dict[tr] = self.behav.events.t_flyOFF[tr] - preTrialMs
+                ev0_dict[tr] = self.behav.events.t_flyOFF[tr] - self.behav.flyON_dur
 
+            ev0 = dict_to_vec(ev0_dict)
+        elif init_event == "min_t_flyOn_move":
+            ev0_dict = {}
+            for tr in self.behav.events.t_flyOFF.keys():
+                ev0_dict[tr] = np.min(
+                    [
+                        self.behav.events.t_flyOFF[tr] - self.behav.flyON_dur,
+                        self.behav.events.t_move[tr],
+                    ]
+                )
+
+            ev0 = dict_to_vec(ev0_dict)
         else:
             try:
-                ev0_dict = self.behav.events.__dict__[init_event]
+                ev0_dict = deepcopy(self.behav.events.__dict__[init_event])
             except KeyError:
                 raise KeyError('Event "%s" was not loaded' % init_event)
 
         # get final event dict
         try:
             ev1_dict = self.behav.events.__dict__[final_event]
+            # if final_event == 't_reward':
+            #     ev_tstop = self.behav.events.t_stop
         except KeyError:
             raise KeyError('Event "%s" was not loaded' % final_event)
 
+        ev1 = dict_to_vec(ev1_dict)
+
+        for tr in self.behav.events.t_flyOFF.keys():
+            ts0 = self.behav.time_stamps[tr][0]
+            ts1 = self.behav.time_stamps[tr][-1]
+            if ts0 > ev0_dict[tr] - preTrialMs / 1000:
+                self.filter[tr] = False
+            else:
+                ev0_dict[tr] = ev0_dict[tr] - preTrialMs / 1000
+            if ts1 < ev1_dict[tr] + postTrialMs / 1000:  # ~np.isnan(ts1) &
+                self.filter[tr] = False
+
+            else:
+
+                ev1_dict[tr] = ev1_dict[tr] + postTrialMs / 1000
+
         tr_sel = np.arange(self.behav.n_trials, dtype=int)[self.filter]
 
-        bin_ts = self.time_stamps_rebin(binwidth_ms=binMs)
-        if not smooth:
+        bin_ts = self.time_stamps_rebin(binwidth_ms=binMs, t0_vec=ev0_dict)
 
+        if not smooth:
             bin_list = self.spikes.bin_spikes(
-                bin_ts, t_start=ev0_dict, t_stop=ev1_dict, select=self.filter
+                bin_ts,
+                t_start=ev0_dict,
+                t_stop=ev1_dict,
+                select=self.filter,
+                cutFirstLastTP=False,
             )
             bin_spk = self.spikes.binned_spikes
         else:
+
             ext_ev0 = {}
             ext_ev1 = {}
-            for tr in ev0_dict.keys():
-                ext_ev0[tr] = ev0_dict[tr] - preTrialMs
-                ext_ev1[tr] = ev1_dict[tr] + postTrialMs
+            for trx in ev0_dict.keys():
+                ext_ev0[trx] = ev0_dict[trx] - self.behav.pre_trial_dur
+                ext_ev1[trx] = ev1_dict[trx] + self.behav.post_trial_dur
             tt_start = dict_to_vec(ext_ev0)
             tt_stop = dict_to_vec(ext_ev1)
             time_dict = self.spikes.bin_spikes(
@@ -177,16 +355,19 @@ class fireFly_dataPreproc(data_handler):
 
             # use the proper binning in ms
             bin_list = self.spikes.bin_spikes(
-                bin_ts, t_start=ev0_dict, t_stop=ev1_dict, select=self.filter
+                bin_ts,
+                t_start=ev0_dict,
+                t_stop=ev1_dict,
+                select=self.filter,
+                cutFirstLastTP=False,
             )
-
             # interp to the right size
             bin_spk = np.zeros(sm_spikes.shape, dtype=object)
             for idxtr in range(tr_sel.shape[0]):
-                tr = tr_sel[idxtr]
+                trx = tr_sel[idxtr]
                 for un in range(self.spikes.binned_spikes.shape[0]):
-                    interp = interp1d(time_dict[tr], sm_spikes[un, idxtr])
-                    bin_spk[un, idxtr] = interp(bin_list[tr])
+                    interp = interp1d(time_dict[trx], sm_spikes[un, idxtr])
+                    bin_spk[un, idxtr] = interp(bin_list[trx])
 
         self.preProcessed = emptyStruct()
         self.preProcessed.numTrials = tr_sel.shape[0]
@@ -196,6 +377,12 @@ class fireFly_dataPreproc(data_handler):
         tw_correlates = {}
         for var in self.behav.continuous.__dict__.keys():
             tw_correlates[var] = np.zeros((tr_sel.shape[0],), dtype=object)
+
+        if add_events:
+            for var in self.behav.events.__dict__.keys():
+                tw_correlates[var] = np.zeros((tr_sel.shape[0],), dtype=object)
+        else:
+            tw_correlates["t_ptb"] = np.zeros((tr_sel.shape[0],), dtype=object)
 
         data = []
         cc = 0
@@ -207,38 +394,59 @@ class fireFly_dataPreproc(data_handler):
             data += [{"Y": deepcopy(tmp)}]
 
             # interp variables
-            if tr == tr_sel[0]:
-                list_pop = []
             for var in self.behav.continuous.__dict__.keys():
-                if "_fly" in var:
+                if "hand" in var:
                     continue
-                try:
-                    time_pts = self.behav.time_stamps[tr]
-                    y_val = self.behav.continuous.__dict__[var][tr]
-                    non_nan = ~np.isnan(y_val)
-                    intrp = interp1d(
-                        time_pts[non_nan], y_val[non_nan], bounds_error=False
-                    )
-                    tw_correlates[var][cc] = intrp(bin_list[tr_sel[cc]])
-                except:
-                    if tr == tr_sel[0]:
-                        print("could not extract %s!" % var)
-                        list_pop += [var]
+
+                time_pts = self.behav.time_stamps[tr]
+                if "_fly" in var:
+                    if expand_fly_pos:
+                        tw_correlates[var][cc] = np.array(
+                            [self.behav.continuous.__dict__[var][tr]]
+                            * len(bin_list[tr_sel[cc]])
+                        )
+                    else:
+                        tw_correlates[var][cc] = self.behav.continuous.__dict__[var][tr]
+                else:
+                    try:
+                        y_val = self.behav.continuous.__dict__[var][tr]
+                        non_nan = ~np.isnan(y_val)
+                        intrp = interp1d(
+                            time_pts[non_nan], y_val[non_nan], bounds_error=False
+                        )
+
+                        tw_correlates[var][cc] = intrp(bin_list[tr_sel[cc]])
+                    except:
+                        continue
+
+            for var in self.behav.events.__dict__.keys():
+                if (var != "t_ptb") and (not add_events):
+                    continue
+                time_pts = self.behav.time_stamps[tr]
+                ts = self.behav.events.__dict__[var][tr][0]
+                if np.isnan(ts):
+                    tw_correlates[var][cc] = np.zeros(bin_list[tr_sel[cc]].shape[0])
+                else:
+                    tw_correlates[var][cc] = np.zeros(bin_list[tr_sel[cc]].shape[0])
+                    ii = bin_list[tr_sel[cc]] > ts
+                    if any(ii):
+                        ii = max(0, np.where(ii)[0][0] - 1)
+                        tw_correlates[var][cc][ii] = 1
 
             cc += 1
-        for var in list_pop:
-            tw_correlates.pop(var)
 
         self.preProcessed.data = data
         self.preProcessed.binSize = binMs
         self.preProcessed.trialDur = None
-        self.preProcessed.T = None
+        self.preProcessed.T = []
+        for key in bin_list.keys():
+            self.preProcessed.T.append(bin_list[key])
         self.preProcessed.covariates = tw_correlates
         self.preprocessing_type = "P-GPFA"
         self.preProcessed.trialId = tr_sel
         if printEndString:
             print("Preprocessing for P-GPFA completed")
-        return self
+        return
 
     def preProcPCA(
         self,
@@ -249,6 +457,8 @@ class fireFly_dataPreproc(data_handler):
         filt_window=None,
         preTrialMs=0,
         postTrialMs=0,
+        add_events=False,
+        expand_fly_pos=False,
     ):
         self.preProcPGPFA(
             binMs=binMs,
@@ -259,6 +469,8 @@ class fireFly_dataPreproc(data_handler):
             filt_window=filt_window,
             preTrialMs=preTrialMs,
             postTrialMs=postTrialMs,
+            add_events=add_events,
+            expand_fly_pos=expand_fly_pos,
         )
 
         # concatenate all data to make it simpler to use with PCA/FA or similar models
@@ -290,7 +502,6 @@ class fireFly_dataPreproc(data_handler):
         self.preProcessed.covariates = stackedCovariate
         self.preprocessing_type = "PCA"
         self.preProcessed.trialId = trialId
-        return self
 
     def preProcGPFA_timeWarp(self, list_timepoints=None, var_list=[]):
         """
@@ -328,16 +539,15 @@ class fireFly_dataPreproc(data_handler):
         self.preProcessed.trialId = trialId
         self.preProcessed.fly_pos = fly_pos[trialKeep]
         self.preProcessed.descr_data = """
-        Description of the variable structure:
-             \t*) self.preProcessed.data : (# trial x # units x # time points) tensor of firing rate in Hz x time interval
-             \t*) self.preProcessed.T : (# trial x # time points), centers of each time interval in seconds
-             \t*) self.preProcessed.raw_trajectory : (# trial x 2 x # time points), raw x,y trajectory of the monkey on the sceen in cm
-             \t*) self.preProcessed.raw_trajectory : same as above but smooth
-             \t*) self.preProcessed.covariates : dictionary, keys are the task variable names, values:
-             \t\t (# trials x # time points) time warped task variable
-        """
+            Description of the variable structure:
+                 \t*) self.preProcessed.data : (# trial x # units x # time points) tensor of firing rate in Hz x time interval
+                 \t*) self.preProcessed.T : (# trial x # time points), centers of each time interval in seconds
+                 \t*) self.preProcessed.raw_trajectory : (# trial x 2 x # time points), raw x,y trajectory of the monkey on the sceen in cm
+                 \t*) self.preProcessed.raw_trajectory : same as above but smooth
+                 \t*) self.preProcessed.covariates : dictionary, keys are the task variable names, values:
+                 \t\t (# trials x # time points) time warped task variable
+            """
         print("Finished preprocessing for GPFA Byron YU code with time warping")
-        return self
 
     def preProcPCA_timeWarp(
         self,
@@ -395,16 +605,15 @@ class fireFly_dataPreproc(data_handler):
         self.preProcessed.trialId = trialId
         self.preProcessed.fly_pos = fly_pos[trialKeep]
         self.preProcessed.descr_data = """
-        Description of the variable structure:
-             \t*) self.preProcessed.data : (# trial x # units x # time points) tensor of firing rate in Hz x time interval
-             \t*) self.preProcessed.T : (# trial x # time points), centers of each time interval in seconds
-             \t*) self.preProcessed.raw_trajectory : (# trial x 2 x # time points), raw x,y trajectory of the monkey on the sceen in cm
-             \t*) self.preProcessed.raw_trajectory : same as above but smooth
-             \t*) self.preProcessed.covariates : dictionary, keys are the task variable names, values:
-             \t\t (# trials x # time points) time warped task variable
-        """
+            Description of the variable structure:
+                 \t*) self.preProcessed.data : (# trial x # units x # time points) tensor of firing rate in Hz x time interval
+                 \t*) self.preProcessed.T : (# trial x # time points), centers of each time interval in seconds
+                 \t*) self.preProcessed.raw_trajectory : (# trial x 2 x # time points), raw x,y trajectory of the monkey on the sceen in cm
+                 \t*) self.preProcessed.raw_trajectory : same as above but smooth
+                 \t*) self.preProcessed.covariates : dictionary, keys are the task variable names, values:
+                 \t\t (# trials x # time points) time warped task variable
+            """
         print("Finished preprocessing for PCA with time warping")
-        return self
 
     def preProcGPFA(self, binMs=20, init_event="t_flyON", final_event="t_stop"):
         """
@@ -464,21 +673,25 @@ class fireFly_dataPreproc(data_handler):
         self.preProcessed.trialId = trialId
         self.preProcessed.fly_pos = fly_pos
         self.preProcessed.descr_data = """
-        Description of the variable structure:
-             \t*) self.preProcessed.data :  dictionary containing (# units x # time points) tensor of spike counts, one matrix per trial
-             \t*) self.preProcessed.T : dictionary containing (# time points)
-             \t*) self.preProcessed.raw_trajectory : (# trial x 2 x # time points), raw x,y trajectory of the monkey on the sceen in cm
-             \t*) self.preProcessed.raw_trajectory : same as above but smooth
-             \t*) self.preProcessed.covariates : dictionary, keys are the task variable names, values:
-             \t\t (# trials x # time points) time warped task variable
-        """
+            Description of the variable structure:
+                 \t*) self.preProcessed.data :  dictionary containing (# units x # time points) tensor of spike counts, one matrix per trial
+                 \t*) self.preProcessed.T : dictionary containing (# time points)
+                 \t*) self.preProcessed.raw_trajectory : (# trial x 2 x # time points), raw x,y trajectory of the monkey on the sceen in cm
+                 \t*) self.preProcessed.raw_trajectory : same as above but smooth
+                 \t*) self.preProcessed.covariates : dictionary, keys are the task variable names, values:
+                 \t\t (# trials x # time points) time warped task variable
+            """
         print("Finished preprocessing for GPFA Byron YU code with time warping")
-        return self
 
-    def time_stamps_rebin(self, binwidth_ms=20):
+    def time_stamps_rebin(self, binwidth_ms=20, t0_vec=None):
         rebin = {}
         for tr in self.behav.time_stamps.keys():
             ts = self.behav.time_stamps[tr]
-            tp_num = np.floor((ts[-1] - ts[0]) * 1000 / (binwidth_ms))
-            rebin[tr] = ts[0] + np.arange(tp_num) * binwidth_ms / 1000.0
+            if t0_vec is None:
+                tp_num = np.floor((ts[-1] - ts[0]) * 1000 / (binwidth_ms))
+                rebin[tr] = ts[0] + np.arange(tp_num) * binwidth_ms / 1000.0
+            else:
+                tp_num = np.floor((ts[-1] - t0_vec[tr]) * 1000 / (binwidth_ms))
+                rebin[tr] = t0_vec[tr] + np.arange(tp_num) * binwidth_ms / 1000.0
+
         return rebin

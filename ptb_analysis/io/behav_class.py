@@ -1040,4 +1040,3 @@ def pair_replay_and_active(trials_behv):
 
         pair_trials = np.hstack((pair_trials, pair))
     return pair_trials
-
