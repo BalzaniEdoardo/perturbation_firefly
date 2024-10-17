@@ -3,7 +3,7 @@ from scipy.io import loadmat
 from ptb_analysis.io import fireFly_dataPreproc, load_trial_types
 
 # this loads the matlab struct into python
-path = "/Users/ebalzani/Desktop/firefly_data/m53s36.mat"
+path = "/Users/ebalzani/Downloads/m53s36.mat"#"/Users/ebalzani/Desktop/firefly_data/m53s36.mat"
 data = fireFly_dataPreproc(path)
 
 # to access the behavior data for a task variable

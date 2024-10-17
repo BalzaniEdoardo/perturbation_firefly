@@ -11,7 +11,7 @@ from scipy.interpolate import interp1d
 from .behav_class import behavior_experiment, load_trial_types
 from .lfp_class import lfp_class
 from .spike_times_class import spike_counts
-
+from copy import deepcopy
 
 def dict_to_vec(dictionary):
     return np.hstack(list(dictionary.values()))
