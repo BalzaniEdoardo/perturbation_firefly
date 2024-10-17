@@ -19,7 +19,7 @@ print(f"Neuron 10, trial 123 - num spikes : {len(spike_times[10, 123])}")
 # rad_vel is a dict with keys the trial number.
 
 # if you want to pre-process for TAME-GP
-data = data.preProcPGPFA(50)
+data.preProcPGPFA(50)
 
 # the output is stored in
 preproc = data.preProcessed
@@ -50,4 +50,4 @@ trial_type = info.trial_type
 filter_trial_type = trial_type[data.filter]
 print(filter_trial_type.shape)
 
-print(f"Tot ptb trials: {filter_trial_type['ptb'].sum()}")
+print(f"Tot ptb trials: {(filter_trial_type['ptb'] == 1).sum()}")
